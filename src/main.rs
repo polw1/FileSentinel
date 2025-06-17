@@ -1,28 +1,27 @@
 
-use notify::{Watcher, RecommendedWatcher, RecursiveMode, Config, EventKind};
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
-use std::time::Duration;
-use std::path::PathBuf;
 use std::fs;
-use chrono::NaiveDateTime;
-use sqlx::{SqlitePool, Sqlite, query_scalar, query};
+use chrono::{DateTime, NaiveDateTime, Utc};
+use sqlx::{query, query_scalar, SqlitePool};
 
-static DATABASE_URL: &str = "sqlite://vigil.db";
+const DATABASE_URL: &str = "sqlite://vigil.db";
 
 fn get_last_modified(path: &PathBuf) -> Option<NaiveDateTime> {
     let metadata = fs::metadata(path).ok()?;
     let modified = metadata.modified().ok()?;
-    Some(NaiveDateTime::from_timestamp(
-        modified.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64,
-        0,
-    ))
+    let secs = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs() as i64;
+    DateTime::<Utc>::from_timestamp(secs, 0).map(|dt| dt.naive_utc())
 }
 
 #[tokio::main]
 async fn main() -> notify::Result<()> {
     let watch_path = "/home/pdc/Downloads"; // caminho da pasta raiz a ser vigiada
-    let db_url = "sqlite://vigil.db";
-    let pool = SqlitePool::connect(db_url).await.expect("failed to connect to db");
+    let pool = SqlitePool::connect(DATABASE_URL).await.expect("failed to connect to db");
 
     // cria tabela se nao existir
     sqlx::query(
@@ -35,22 +34,24 @@ async fn main() -> notify::Result<()> {
     ).execute(&pool).await.unwrap();
 
     let (tx, rx) = channel();
-    let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
-    watcher.watch(watch_path, RecursiveMode::Recursive)?;
+    let mut watcher = RecommendedWatcher::new(move |res| {
+        tx.send(res).unwrap();
+    }, Config::default())?;
+    watcher.watch(Path::new(watch_path), RecursiveMode::Recursive)?;
 
     println!("🟢 Observando mudanças em: {}", watch_path);
 
-    while let Ok(event) = rx.recv() {
+    while let Ok(Ok(event)) = rx.recv() {
         if matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_)) {
             for path in event.paths {
                 if path.extension().map(|ext| ext.eq_ignore_ascii_case("jpg")).unwrap_or(false) {
                     if let Some(modified) = get_last_modified(&path) {
                         let path_str = path.to_string_lossy().to_string();
 
-                        let existing = query_scalar!(
+                        let existing: Option<NaiveDateTime> = query_scalar(
                             "SELECT last_modified FROM arquivos WHERE caminho = ?",
-                            path_str
                         )
+                        .bind(&path_str)
                         .fetch_optional(&pool)
                         .await
                         .unwrap();
@@ -58,11 +59,11 @@ async fn main() -> notify::Result<()> {
                         match existing {
                             Some(last_mod) => {
                                 if modified > last_mod {
-                                    query!(
+                                    query(
                                         "UPDATE arquivos SET sincronizar = 'Sim', last_modified = ? WHERE caminho = ?",
-                                        modified,
-                                        path_str
                                     )
+                                    .bind(modified)
+                                    .bind(&path_str)
                                     .execute(&pool)
                                     .await
                                     .unwrap();
@@ -70,11 +71,11 @@ async fn main() -> notify::Result<()> {
                                 }
                             }
                             None => {
-                                query!(
+                                query(
                                     "INSERT INTO arquivos (caminho, last_modified, sincronizar) VALUES (?, ?, 'Sim')",
-                                    path_str,
-                                    modified
                                 )
+                                .bind(&path_str)
+                                .bind(modified)
                                 .execute(&pool)
                                 .await
                                 .unwrap();
