@@ -4,18 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Watcher de arquivos multiplataforma
-notify = "6.1.1"
+notify = "8"
 
-# Conexão com SQLite usando SQLx (assíncrono)
-sqlx = { version = "0.7.4", features = ["sqlite", "runtime-tokio", "chrono"] }
-
-# Biblioteca para datas e horários
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
-
-# Utilitários de caminho e manipulação de arquivos
 tokio = { version = "1.38.0", features = ["full"] }
-
-# Logging opcional (para debug se quiser)
 log = "0.4"
 env_logger = "0.11"
+clap = { version = "4.0", features = ["derive"] }
