@@ -48,7 +48,7 @@ fn get_file_owner(path: &PathBuf) -> String {
 fn parse_cli_args() -> (String, String, String, Vec<String>) {
     let matches = Command::new("FileSentinel")
         .version("0.1.0")
-        .author("PDC <pdc@example.com>")
+        .author("Policarpo <polic4rpo@gmail.com>")
         .about("FileSentinel: Monitors a directory for file changes and syncs them to a SQLite database. Tracks who changed, what changed, and the action (added, modified, deleted).\n\nUSAGE EXAMPLES:\n  Monitor all files in a folder (default extensions: jpg,jpeg):\n    file-sentinel --path /folder/to/monitor\n\n  Monitor all extensions:\n    file-sentinel --path /folder --extensions '*'\n\n  Monitor only specific extensions:\n    file-sentinel --path /folder --extensions 'txt,log,png'\n\n  Set log level to debug:\n    file-sentinel --path /folder --log-level debug\n\n  Use a custom database file:\n    file-sentinel --path /folder --database sqlite://custom.db\n")
         .arg(
             Arg::new("path")
